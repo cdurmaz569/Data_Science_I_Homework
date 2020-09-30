@@ -1,0 +1,302 @@
+---
+title: "Data Challenge #1: Dairy Cow Visualizations"
+author: "Ceyda Durmaz"
+date: "09/28/2020"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+editor_options: 
+  chunk_output_type: console
+---
+
+Link to GitHub Repository: 
+
+### Background
+The United States Department of Agriculture (USDA) has collected statistics on 
+the U.S. dairy condition from the past 15 months and annual statistics from the 
+past 3 years. From this data, consumption of dairy products has changed in both
+amount and choice. These changes are apparent when examining dairy production, 
+sales, and consumption over both the course of time and location.
+
+### Load libraries, load data, and set theme
+```{r warning=FALSE, message=FALSE}
+# load libraries 
+libraries = c("readr", "ggplot2", "RColorBrewer", "knitr", "cowplot",
+              "tidyverse", "reshape", "lubridate")
+library.check <- lapply(libraries, FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+# load data 
+setwd("~/Documents/Data_Science_I/Homework/Homework_1/")
+clean.cheese <- read.csv("clean_cheese.csv")
+fluid.milk.sales <- read.csv("fluid_milk_sales.csv")
+milk.products.facets <- read.csv("milk_products_facts.csv")
+milkcow.facts <- read.csv("milkcow_facts.csv")
+state.milk.production <- read.csv("state_milk_production.csv")
+
+# set theme for ggplot
+theme_set(theme_classic())
+theme.shrink <-   theme(axis.title.x = element_text(size = 8),
+                        axis.title.y = element_text(size = 8))
+
+# set palette to use
+def.palette <- "Set1"
+```
+
+### Time Series: Production vs Sales of Milk from 1980 to 2014
+```{r warning=FALSE, message=FALSE}
+# get total milk production (lbs)
+milk.production <- milkcow.facts[,c(1,4)]
+
+# get total milk product sales (lbs)
+milk.sales <- fluid.milk.sales %>% 
+  filter(milk_type == "Total Production") %>% select(year, pounds)
+
+# combine data into one dataframe for visualization 
+milk.processing.years <- milk.production %>% 
+  inner_join(milk.sales, by = "year") 
+
+# rename columns of dataframe and melt to input to ggplot
+names(milk.processing.years) <- c("Year", "Produced", "Sales")
+
+# get ratio of average of milk produced:sold
+ratio.milk.process <- round(mean(milk.processing.years$Produced)/
+  mean(milk.processing.years$Sales))
+
+# melt data so each row is 'year-production/sale-pounds'
+milk.processing.years <- melt(milk.processing.years, id.vars = "Year")
+
+# time course line plot of milk processing over the years
+ggplot(milk.processing.years, aes(x = Year)) + 
+  geom_line(aes(y = value, col = variable), size = 1.5) + # line plot
+  scale_color_manual(labels = c("Produced", "Sales"), # change color of lines
+                     values = c("Produced" = "firebrick1", 
+                                "Sales" = "springgreen2")) + 
+  labs(title = "Pounds of Milk Produced and Sold (1980-2014)", # add title
+       x = "Year (1980 - 2014)", # change x axis label
+       y = "Pounds of Milk per Year (lb/year)",
+       caption = "Figure 1") # change y axis label
+```
+
+**Figure 1.** This plot shows the total milk production ('Produced', red) and 
+milk product sold ('Sales', green) in pounds annually from 1980 to 2014. 
+Compared to sales, an average of around `r ratio.milk.process` times more 
+pounds of milk seem to be produced. While milk production has steadily increased 
+over the 34 years, milk sales remain fairly unchanged from 1980 to 2010, before 
+beginning to slightly drop after 2010. 
+
+### Trends in Milk Production Across US by region over Three Decades
+```{r warning=FALSE, message=FALSE}
+# subset state.milk.production by decade
+regions.80 <- state.milk.production %>% filter(year < 1990)
+regions.90 <- state.milk.production %>% filter(year >= 1990 & year < 2000)
+regions.00 <- state.milk.production %>% filter(year >= 2000)
+
+# give each decade an identifier
+regions.80$Decade <- "1980s"
+regions.90$Decade <- "1990s"
+regions.00$Decade <- "2000s"
+
+# combine regions decade subsets and filter out states 
+regions.milk <- rbind(regions.80, regions.90, regions.00)
+regions.milk <- regions.milk[,-c(2)]
+
+# grouped boxplots 
+ggplot(regions.milk, aes(x = region, y = milk_produced, fill = factor(Decade))) + 
+  geom_boxplot() + 
+  scale_fill_brewer(palette = def.palette) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(title = "Mean Pounds of Milk Produced by Region of the US by Year",
+       x = "Region in US",
+       y = "Pounds of Milk Produced (lb)", 
+       fill = "Year",
+       caption = "Figure 2")
+
+```
+
+**Figure 2.** This grouped boxplot displays the average pounds of milk produced across regions of the US every 17 years from 1980 to 2014. In terms of milk produced over time, of the ten regions five showed clear increases (Lake States, Mountain, Northeast, Pacific, and Southern Plains), two showed clear decreases (Appalachian, Delta States), and three showed slight to no discernible increase (Corn Belt, 
+Northern Plains, Southeast). Interestingly, the regions showing a clear increase 
+produce more pounds of milk on average. 
+
+### Changes in Dairy Product Consumption per Person over Three Decades
+```{r warning=FALSE, message=FALSE}
+# filter milk.products.facets and clean.cheese to get consumptions/person by year
+milk.person.80 <- milk.products.facets %>% filter(year < 1990) %>% select(year, fluid_milk)
+milk.person.90 <- milk.products.facets %>% filter(year >= 1990 & year < 2000) %>% select(year, fluid_milk)
+milk.person.00 <- milk.products.facets %>% filter(year >= 2000) %>% select(year, fluid_milk)
+cheese.person.80 <- clean.cheese %>% filter(Year < 1990) %>% select(Year, Cheddar)
+cheese.person.90 <- clean.cheese %>% filter(Year >= 1990 & Year < 2000) %>% select(Year, Cheddar)
+cheese.person.00 <- clean.cheese %>% filter(Year >= 2000) %>% select(Year, Cheddar)
+
+# rename columns
+names(milk.person.80) <- c("Year", "Consumption")
+names(milk.person.90) <- c("Year", "Consumption")
+names(milk.person.00) <- c("Year", "Consumption")
+names(cheese.person.80) <- c("Year", "Consumption")
+names(cheese.person.90) <- c("Year", "Consumption")
+names(cheese.person.00) <- c("Year", "Consumption")
+
+# give each decade an identifier
+milk.person.80$Decade <- "1980s"
+milk.person.90$Decade <- "1990s"
+milk.person.00$Decade <- "2000s"
+cheese.person.80$Decade <- "1980s"
+cheese.person.90$Decade <- "1990s"
+cheese.person.00$Decade <- "2000s"
+
+# add group id to distinguish between milk and cheese data
+milk.person.80$groupID <- "Milk"
+milk.person.90$groupID <- "Milk"
+milk.person.00$groupID <- "Milk"
+cheese.person.80$groupID <- "Cheese"
+cheese.person.90$groupID <- "Cheese"
+cheese.person.00$groupID <- "Cheese"
+
+# combine subsetted df by row
+person.consumption <- rbind(milk.person.80, milk.person.90, milk.person.00,
+                            cheese.person.80, cheese.person.90, cheese.person.00)
+
+# grouped bar plot
+ggplot(person.consumption, aes(x = groupID, y = Consumption, fill = factor(Decade))) +
+  geom_bar(position = "dodge", stat = "summary", fun = "mean") +
+  scale_fill_brewer(palette = def.palette) +
+  labs(title = "Dairy Product Consumption by Year",
+       x = "Dairy Product",
+       y = "Consumption (lb/person)",
+       fill = "Year",
+       caption = "Figure 3")
+```
+
+**Figure 3.** This grouped barplot visualizes changes in mean consumption 
+(lb/person) over three decades in two classes of dairy product: cheese and milk.
+Cheese consumption per person on average, while showing a very subtle increase 
+each decade, reamined mostly unchanged. In comparison, the average consumption 
+of milk per person shows a clear decrease each decade. 
+
+### Composition of Milk Products Sales by Decade
+```{r warning=FALSE, message=FALSE}
+# filter out Total Production form fluid.milk.sales
+milk.sales <- fluid.milk.sales %>% filter(milk_type != "Total Production")
+
+# subset by decade
+milk.sales.80 <- milk.sales %>% filter(year >= 1980 & year < 1990)
+milk.sales.90 <- milk.sales %>% filter(year >= 1990 & year < 2000)
+milk.sales.00 <- milk.sales %>% filter(year >=2000)
+
+# give each decade an identifier
+milk.sales.80$Decade <- "1980s"
+milk.sales.90$Decade <- "1990s"
+milk.sales.00$Decade <- "2000s"
+
+# combine milk sales decade subsets
+milk.sales <- rbind(milk.sales.80, milk.sales.90, milk.sales.00)
+
+# rename columns of milk.sales
+names(milk.sales) <- c("Year", "Milk Type", "Pounds", "Decade")
+
+# stacked bar plot
+ggplot(milk.sales, aes(x = Decade, y = Pounds, fill = `Milk Type`)) +
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_brewer(palette = def.palette) +
+  coord_flip() + 
+  labs(title = "Milk Sales by Decade",
+       x = "Decade",
+       y = "Percent of Milk Product",
+       caption = "Figure 4")
+```
+
+**Figure 4.** This stacked barplot shows the percent composition of milk sales 
+over three decades. Of the eight types of milk, whole milk and reduced fat (2%) 
+milk make up the majority of the sales. However, whole milk sales have been 
+steadily decreasing with each decade, while skim milk and low fat (1%) milk sales
+hve increased. Sales in flavored whole milk and buttermilk remain mostly unchanged. 
+
+### Milk Cow Maintenance over Three Decades
+```{r warning=FALSE, message=FALSE}
+# subset milkcow.facts by decade
+milkcow.80 <- milkcow.facts %>% filter(year < 1990)
+milkcow.90 <- milkcow.facts %>% filter(year >= 1990 & year < 2000)
+milkcow.00 <- milkcow.facts %>% filter(year >= 2000)
+
+# give each decade an identifier
+milkcow.80$Decade <- "1980s"
+milkcow.90$Decade <- "1990s"
+milkcow.00$Decade <- "2000s"
+
+# combine milkcow decade subsets 
+milkcow.cat <- rbind(milkcow.80, milkcow.90, milkcow.00)
+  
+# create scatterplots analyzing cows, milk production, and cost  
+scatter.1 <- ggplot(milkcow.cat, aes(x = milk_cow_cost_per_animal, 
+                                     y = avg_milk_cow_number)) + 
+  geom_point(aes(col = Decade), size = 2) +
+  geom_smooth(method = "loess", se = F) +
+  scale_color_brewer(palette = def.palette) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(subtitle = "Cost of Cow vs Number of Cows",
+       x = "Cost of Cow ($)",
+       y = "Average Number of Cows") + 
+  theme.shrink
+
+scatter.2 <- ggplot(milkcow.cat, aes(x = milk_per_cow, 
+                          y = milk_production_lbs)) + 
+  geom_point(aes(col = Decade), size = 2) +
+  geom_smooth(method = "loess", se = F) +
+  scale_color_brewer(palette = def.palette) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(subtitle = "Milk Per Cow vs Milk Produced",
+       x = "Average Milk per Cow (lb)",
+       y = "Total Milk Production (lb)") + 
+  theme.shrink
+
+scatter.3 <- ggplot(milkcow.cat, aes(x = milk_per_cow, 
+                          y = avg_milk_cow_number)) + 
+  geom_point(aes(col = Decade), size = 2) +
+  geom_smooth(method = "loess", se = F) +
+  scale_color_brewer(palette = def.palette) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(subtitle = "Milk per Cow vs Number of Cows",
+       x = "Average Milk per Cow (lb)",
+       y = "Average Number of Cows") + 
+  theme.shrink
+
+scatter.4 <- ggplot(milkcow.cat, aes(x = avg_milk_cow_number, 
+                        y = milk_production_lbs)) + 
+  geom_point(aes(col = Decade), size = 2) +
+  geom_smooth(method = "loess", se = F) +
+  scale_color_brewer(palette = def.palette) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(subtitle = "Number of Cows vs Milk Produced",
+       x = "Average Number of Cows",
+       y = "Total Milk Production (lb)",
+       caption = "Figure 5") +
+  theme.shrink
+
+plot_grid(scatter.1, scatter.2, scatter.3, scatter.4, 
+          labels = c("A", "B", "C", "D"), 
+          ncol = 2, nrow = 2)
+```
+
+**Figure 5.** These scatter plots show the correlation between various factors 
+milk cow owning farmers have considered over three decades. **(A)** Over time, 
+there has been a negative correlation with the increase in cost of cows and the 
+drop in the average number of cows owned. **(B)** Despite the clear drop in cow 
+ownership, there is a clear positive correlation between the average pounds of milk
+produced per cow and the total milk produced as time progresses. **(C)** As the 
+average milk produced per cow could be a potential confounding variable in the 
+relationship between cow cost and cow ownership shown in A, the average milk 
+produced per cow was compared to the average number of cows and showed an almost
+identical negative correlation to A. **(D)** Interestingly, this information 
+helps make sense of the seemingly contradicting negative correlation of cow 
+ownership and total milk produced, because if the cows are producing more milk 
+on average, farmers can own less cows. 
+
+
+
+
