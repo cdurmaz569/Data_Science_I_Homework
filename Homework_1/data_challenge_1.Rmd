@@ -1,7 +1,7 @@
 ---
 title: "Data Challenge #1: Dairy Cow Visualizations"
 author: "Ceyda Durmaz"
-date: "09/28/2020"
+date: "09/30/2020"
 output:
   prettydoc::html_pretty:
     theme: leonids
@@ -10,7 +10,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-Link to GitHub Repository: 
+Link to GitHub Repository: https://github.com/cdurmaz569/Data_Science_I_Homework/tree/master/Homework_1
 
 ### Background
 The United States Department of Agriculture (USDA) has collected statistics on 
