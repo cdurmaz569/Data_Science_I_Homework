@@ -1,0 +1,215 @@
+---
+title: "Data Challenge #3: Coffee Ratings"
+author: "Ceyda Durmaz"
+date: "10/28/2020"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+editor_options: 
+  chunk_output_type: console
+---
+
+Link to GitHub Repository: https://github.com/cdurmaz569/Data_Science_I_Homework/tree/master/Homework_3
+
+# Load libraries, load data, and set options
+```{r warning=FALSE, message=FALSE}
+# load libraries 
+libraries = c("tidytuesdayR", "knitr", "kableExtra", "data.table", "tidyverse",
+              "ggplot2", "outliers", "rlang")
+library.check <- lapply(libraries, FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+# Get coffee data from tidytuesdayR package
+tues_data <- tt_load('2020-07-07')
+coffee_ratings <- tues_data$coffee_ratings
+
+# Disable scientific notation
+options(scipen = 999)
+
+# Set theme
+theme_set(theme_classic())
+```
+
+# Functions
+```{r warning=FALSE, message=FALSE}
+#' Get Statistics Vector 
+#'
+#' @param vec Numeric vector to get statistics on
+#'
+#' @return A vector of mean and sd 
+get_stats_vec <- function(vec){
+  
+  vec_out <- c(round(mean(vec, na.rm = TRUE), 2),
+               round(sd(vec, na.rm = TRUE), 2))
+  return(vec_out)
+
+}
+
+#' Get Statistics Table 
+#'
+#' @param df Dataframe where coffee category of interest is the first column 
+#'
+#' @return An html table where rows are coffee ratings categories and columns
+#' of mean and sd grouped specified coffee category 
+get_stats_table <- function(df){
+  
+  # Get name of category
+  category = colnames(df[,1])
+  
+  # Set vector of rating categories 
+  vec_rating = c("aroma", "flavor", "aftertaste", "acidity", "body", 
+                 "balance", "uniformity", "clean_cup", "sweetness",
+                 "cupper_points", "moisture")
+  
+  # Initialize empty dataframe with number of rows set to vec_rating length
+  tbl_out <- data.frame()[length(vec_rating), ]
+  
+  # Get vector of categories in category
+  vec_cat <- names(table(df[category]))
+  
+  # Add selected coffee rating stats for each category 
+  for(cat in vec_cat){
+    
+    # Initialize temporary table 
+    tbl_tmp <- data.frame(mean = numeric(), sd = numeric())
+    
+    for(col in vec_rating){
+      
+      # Select column
+      vec_tmp <- coffee_ratings %>% 
+        filter(df[category] == cat) %>%
+        select(col)
+      
+      # Get mean and sd 
+      vec_stats <- get_stats_vec(vec_tmp[[1]])
+      
+      # If sd == NA, replace with '.'
+      if(is.na(vec_stats[2])){
+        vec_stats[2] <- "."
+      }
+      
+      # Add to temporary table 
+      tbl_tmp[nrow(tbl_tmp)+1, ] <- c(vec_stats[1], vec_stats[2])
+      
+    }
+    
+    # Add to output table
+    tbl_out <- cbind(tbl_out, tbl_tmp)
+    
+  }
+  
+  # Set rownames
+  rownames(tbl_out) <- str_to_title(colnames(df[, vec_rating]))
+  
+  # Output html table
+  vec_header <- c(1, rep(2, length(vec_cat)))
+  tbl_out %>%
+    kbl() %>%
+    kable_minimal(c("striped"), full_width = FALSE) %>%
+    add_header_above(setNames(vec_header, c(" ", vec_cat))) %>%
+    scroll_box(width = "100%") 
+  
+}
+
+#' Make List for Tables 
+#'
+#' @param df Dataframe or tibble containing coffee ratings and coffee categories
+#' @param vec Vector containing coffee categories of interest
+#'
+#' @return List of modified dataframe or tibble where coffee category of 
+#' interest is the first column and rest of tibble is untouched 
+make_table_list <- function(df, vec){
+  
+  # Initialize empty list and counter
+  list_out = list()
+  count = 1
+  
+  # Add modified data frame based on vec value
+  for(cat in vec){
+    list_out[[count]] <- df %>% select(cat, everything())
+    count = count + 1
+  }
+  
+  # Return list of modified data frames
+  return(list_out)
+}
+
+#' Plot Coffee Scatter Plot
+#'
+#' @param df Dataframe or tibble
+#' @param x_var String of column name of x-axis variable
+#' @param y_var String of column name of y-axis variable
+#' @param color_var String of column name of coffee category to color by 
+#'
+#' @return Scatter plot of two specified coffee ratings colored by specified 
+#' coffee category, where outliers have been removed 
+plot_coffee_scatter <- function(df, x_var, y_var, color_var){
+  
+  # Filter data to remove outliers
+  df <- coffee_ratings %>%
+    select(color_var, x_var, y_var) %>%
+    group_by(!!sym(color_var))  %>%
+    filter(!(!!sym(x_var)) %in% c(outlier(!!sym(x_var)))) %>%
+    filter(!(!!sym(y_var)) %in% c(outlier(!!sym(y_var))))
+  
+  # Visualize scatterplot
+  ggplot(df, aes_string(x = x_var, y = y_var, color = color_var)) +
+  geom_jitter(size = 3) +
+  labs(title = paste0(str_to_title(x_var),
+                      " vs ",
+                      str_to_title(y_var),
+                      " grouped by ",
+                      tools::toTitleCase(gsub("\\_", " ", color_var))),
+       x = str_to_title(x_var),
+       y = str_to_title(y_var),
+       color = tools::toTitleCase(gsub("\\_", " ", color_var)))
+  
+}
+```
+
+# Question 1
+Note: If column category has n=1, standard deviation cannot be calculated. The 
+sd column for these categories with n=1 are represented by ".".
+```{r warning=FALSE, message=FALSE, results='asis'}
+# Bin altitude column of coffee data
+coffee_ratings <- coffee_ratings %>%
+  mutate(altitude_mean_binned = case_when(
+    altitude_mean_meters >= 0 & altitude_mean_meters <= 499 ~ "0-499",
+    altitude_mean_meters > 499 & altitude_mean_meters <= 999 ~ "500-999",
+    altitude_mean_meters > 999 & altitude_mean_meters <= 1499 ~ "1000-1499",
+    altitude_mean_meters > 1499 & altitude_mean_meters <= 1999 ~ "1500-1999",
+    altitude_mean_meters >= 2000 ~ "2000+",
+    is.na(altitude_mean_meters) ~ "Missing",
+    TRUE ~ as.character(altitude_mean_meters))) %>%
+  mutate(altitude_mean_binned = factor(
+    altitude_mean_binned, 
+    levels = c("0-499", "500-999", "1000-1499", 
+               "1500-1999", "2000+", "Missing")
+  ))
+
+# Generate tables and visualize
+map(make_table_list(coffee_ratings,
+                    c("species", "country_of_origin", "altitude_mean_binned")),
+    get_stats_table)
+```
+
+# Question 2
+```{r warning=FALSE, message=FALSE}
+# Create list of arguments for plot_coffee_scatter
+## Scatter Plot 1: aroma vs flavor colored by species
+## Scatter Plot 2: balance vs body colored by binned mean altitude 
+scatter_args <- list(df = list(coffee_ratings, coffee_ratings),
+                     x_var = c("aroma", "balance"),
+                     y_var = c("flavor", "body"),
+                     color_var = c("species", "altitude_mean_binned"))
+
+# Generate scatter plots and visualize
+pmap(scatter_args, plot_coffee_scatter)
+```
+
