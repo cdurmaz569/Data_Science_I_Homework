@@ -1,0 +1,167 @@
+---
+title: "Data Challenge #4: National Parks"
+author: "Ceyda Durmaz"
+date: "11/11/2020"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+editor_options: 
+  chunk_output_type: console
+---
+
+Link to GitHub Repository: https://github.com/cdurmaz569/Data_Science_I_Homework/tree/master/Homework_4
+
+# Load libraries, load data, and set options
+```{r warning=FALSE, message=FALSE}
+# load libraries 
+libraries = c("tidytuesdayR", "knitr", "kableExtra", "data.table", "tidyverse",
+              "ggplot2", "outliers", "rlang", "RColorBrewer")
+library.check <- lapply(libraries, FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+# Get coffee data from tidytuesdayR package
+tues_data <- tt_load('2019-09-17')
+park_visits <- tues_data$national_parks
+state_pop <- tues_data$state_pop
+
+# Disable scientific notation
+options(scipen = 999)
+
+# Set theme
+theme_set(theme_classic())
+
+# Set seed
+set.seed(18)
+```
+
+# Functions
+```{r warning=FALSE, message=FALSE}
+#' Plot Line Plot of Visitors over Time 
+#'
+#' Plots number of park visitors over time for parks. Visitor counts can be 
+#' either raw or normalized by state population 
+#' 
+#' @param df Dataframe or list with columns 'year', 'parkname', 'visitors',
+#' and 'visitors_norm'
+#' @param norm Boolean indicating whether counts to plot are normalized
+#'
+#' @return Line plot of specified counts over time for each park 
+plot_visitors <- function(df, norm = TRUE){
+  
+  # set labels
+  if (norm) {
+    y_var = "visitors_norm"
+    counts = "Normalized"
+    y_units = "Visitors/State Population"
+  } else{
+    y_var = "visitors"
+    counts = "Raw"
+    y_units = "Raw Number of Visitors"
+  }
+  
+  # Visualize line plot
+  ggplot(df, aes(x = year)) +
+    geom_line(aes_string(y = y_var, col = "parkname")) +
+    scale_color_brewer(palette = "Dark2") +
+    labs(
+      title = paste0(counts, " Counts of Visitors Over Time"),
+      x = "Year",
+      y = paste0("Number of Visitors (", y_units, ")"),
+      col = "Park Name"
+    )
+  
+}
+
+#' Simulate Number of Visitors
+#'
+#' Runs simulation for number of visitors at a park for the year 1942
+#' 
+#' @param df Dataframe or list with columns 'year', 'parkname', 'visitors',
+#' and 'visitors_norm'
+#' @param park_name String of park name
+#' @param n_sim Numeric of desired number of simulations. Default = 1000
+#' @param prob Double of probability of visiting park
+#'
+#' @return Histogram of distribution for number of park visitors in 1942
+sim_visits <- function(df, park_name, n_sim = 1000, prob = 0.5){
+  
+  # filter df to keep years 1941 and 1942 for specified park
+  df_filt <- df %>% 
+    filter(parkname == park_name) %>%
+    filter(year >= 1941 & year <= 1942)
+  
+  # get sum of number of visitors in 1941 and 1942
+  sum_visitors <- sum(df_filt$visitors)
+  
+  # get observed counts for 1942 only
+  visitors_1942 <- filter(df_filt, year == 1942)$visitors 
+  
+  # simulate number of visitors
+  sim_data <- data.frame(visitors = rbinom(n_sim, sum_visitors, prob))
+  
+  # Visualize simulations as histogram
+  ggplot(sim_data, aes(x = visitors)) + 
+    geom_histogram(fill = "steelblue4", binwidth = 10) + 
+    geom_hline(yintercept = 0, col = "black") + 
+    geom_vline(xintercept = visitors_1942, col = "red", size = 2) +
+    labs(
+      title = paste0(n_sim,
+                     " Simulations of Visitors in 1942 at ",
+                     park_name),
+      x = "Number of Visitors",
+      y = "Simulation Count",
+      legend.position = "none"
+    ) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+}
+```
+
+# Part 1: Trend in Park Visitors for Crater Lake, Joshua Tree, and Zion
+```{r warning=FALSE, message=FALSE}
+# filter by states
+state_pop <- state_pop %>%
+  filter(state == "CA" | state == "OR" | state == "UT")
+
+# filter by parks and add state population data 
+three_parks <- park_visits %>%
+  filter(parkname == "Crater Lake" | 
+         parkname == "Joshua Tree" | 
+         parkname == "Zion") %>%
+  select(year, state, parkname, visitors) %>% # clean-up columns
+  filter(year != "Total") %>% # discard rows where year == "Total"
+  mutate(year = as.numeric(year)) %>% # convert years from char to numeric
+  filter(year > 1940 & year < 2016) %>% # keep years 1941-2015 
+  left_join(state_pop, by = c("year", "state")) %>%
+  mutate(visitors_norm = visitors/pop)
+
+# create list of args for plot_visitors
+plot_args <- list(df = list(three_parks, three_parks),
+                  norm = c(FALSE, TRUE))
+
+# plot visitors over time by raw count and normalized counts
+pmap(plot_args, plot_visitors)
+```
+
+# Part 2: Simulation of visitors in 1942
+```{r warning=FALSE, message=FALSE}
+# create list of args for sim_visits
+sim_args <- list(df = list(three_parks, three_parks, three_parks),
+                 park_name = c("Joshua Tree", "Crater Lake", "Zion"))
+
+# plot distributions of simulated number of visitors 
+pmap(sim_args, sim_visits)
+```
+
+# Part 3: Summary
+The trends visualized by line plots in part I show that raw counts can be 
+misleading. The raw counts show that Joshua Tree has the second highest
+increase, along with a steady increase, in visitors from 1940 to 2015. However, 
+the normalized counts show that Joshua Tree appears relatively unchanged over time compared to the other parks. Further, the normalized counts reveal some trends 
+in the data not shown visualized by raw counts. The simulation used to examine the drop in visitors from 1941 to 1942 across all three parks were consistent with the trends of the normalized line plot, where Crater Lake's and Zion Parks' observed visitors in 1942 were strikingly lower than those projected by the simulation compared to Joshua Tree. 
+
